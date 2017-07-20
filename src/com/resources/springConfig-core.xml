@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:cache="http://www.springframework.org/schema/cache"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc" xmlns:jee="http://www.springframework.org/schema/jee"
+	xmlns:jms="http://www.springframework.org/schema/jms" xmlns:lang="http://www.springframework.org/schema/lang"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:oxm="http://www.springframework.org/schema/oxm"
+	xmlns:p="http://www.springframework.org/schema/p" xmlns:task="http://www.springframework.org/schema/task"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:util="http://www.springframework.org/schema/util"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.1.xsd 
+	http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.1.xsd  
+   	http://www.springframework.org/schema/cache http://www.springframework.org/schema/cache/spring-cache-4.1.xsd  
+    http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.1.xsd  
+    http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc-4.1.xsd  
+    http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee-4.1.xsd  
+    http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms-4.1.xsd  
+  	http://www.springframework.org/schema/lang http://www.springframework.org/schema/lang/spring-lang-4.1.xsd  
+   	http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.1.xsd  
+  	http://www.springframework.org/schema/oxm http://www.springframework.org/schema/oxm/spring-oxm-4.1.xsd  
+ 	http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.1.xsd  
+    http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.1.xsd  
+    http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-4.1.xsd">
+
+	<context:annotation-config />
+
+	<aop:aspectj-autoproxy />
+
+	<context:component-scan base-package="com">
+		<context:exclude-filter type="annotation"
+			expression="org.springframework.stereotype.Controller" />
+	</context:component-scan>
+
+<!--  	<context:property-placeholder location="classpath:com/resources/datasource.properties" />  -->
+
+  	<bean id="propertyConfigurer"
+		class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="locations">
+			<list>
+				<value>classpath:com/resources/datasource.properties</value>
+			</list>
+		</property>
+
+	</bean> 
+
+	<bean id="dataSourceMySql" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+		destroy-method="close">
+		<property name="driverClass" value="${jdbc.mysql.driverClass}" />
+		<property name="jdbcUrl" value="${jdbc.mysql.url}" />
+		<property name="user" value="${jdbc.mysql.user}" />
+		<property name="password" value="${jdbc.mysql.password}" />
+		<!-- <property name="maxIdleTime" value="${mysql.jdbc.maxIdleTime}" /> -->
+	</bean>
+
+	<bean id="dataSourceOracle" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+		destroy-method="close">
+		<property name="driverClass" value="${jdbc.oracle.driverClass}" />
+		<property name="jdbcUrl" value="${jdbc.oracle.url}" />
+		<property name="user" value="${jdbc.oracle.user}" />
+		<property name="password" value="${jdbc.oracle.password}" />
+		<!-- <property name="maxIdleTime" value="${oracle.jdbc.maxIdleTime}" /> -->
+	</bean>
+
+	<bean id="dataSource" class="com.core.DynamicDataSource">
+		<property name="targetDataSources">
+			<map key-type="java.lang.String">
+				<entry key="dataSourceMySql" value-ref="dataSourceMySql" />
+				<entry key="dataSourceOracle" value-ref="dataSourceOracle" />
+			</map>
+		</property>
+		<property name="defaultTargetDataSource" ref="dataSourceMySql" />
+	</bean>
+
+	<bean id="ysqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="dataSource" />
+		<property name="mapperLocations" value="classpath:com/resources/mapper/*.xml" />
+	</bean>
+
+
+	<!-- 在spring里使用org.mybatis.spring.mapper.MapperScannerConfigurer 进行自动扫描的时候，设置了sqlSessionFactory 
+	的话，可能会导致PropertyPlaceholderConfigurer失效，也就是用${jdbc.username}这样之类的表达式，将无法获取到properties文件里的内容。 
+	导致这一原因是因为，MapperScannerConigurer实际是在解析加载bean定义阶段的，这个时候要是设置sqlSessionFactory的话，会导致提前初始化一些类，
+	这个时候，PropertyPlaceholderConfigurer还没来得及替换定义中的变量，导致把表达式当作字符串复制了。 
+	但如果不设置sqlSessionFactory 属性的话，就必须要保证sessionFactory在spring中名称一定要是sqlSessionFactory 
+	，否则就无法自动注入。又或者直接定义 MapperFactoryBean ，再或者放弃自动代理接口方式。 -->
+	<!--MapperScannerConfigurer将会扫描basePackage并自动装配 -->
+	<bean class="tk.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="com.dao" />
+		<property name="sqlSessionFactoryBeanName" value="ysqlSessionFactory"/>
+	</bean>
+
+	<!-- 事务管理器 -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+
+
+	<aop:config>
+		<aop:pointcut id="serviceMethods" expression="execution(* com.service..*.*(..))" />
+		<aop:advisor advice-ref="txadvice" pointcut-ref="serviceMethods" />
+	</aop:config>
+
+	<tx:advice id="txadvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="add*" propagation="REQUIRED" />
+			<tx:method name="save*" propagation="REQUIRED" />
+			<tx:method name="update*" propagation="REQUIRED" />
+			<tx:method name="delete*" propagation="REQUIRED" />
+			<tx:method name="get*" read-only="true" propagation="SUPPORTS" />
+			<tx:method name="find*" read-only="true" propagation="SUPPORTS" />
+			<tx:method name="*" read-only="true" />
+		</tx:attributes>
+	</tx:advice>
+
+<!--  	<bean id="dataSourceInterceptor" class="com.core.DataSourceInterceptor" /> 
+
+ 	<aop:config>
+		<aop:aspect id="dataSourceAspect" ref="dataSourceInterceptor">
+			<aop:pointcut id="dsMysql"
+				expression="execution(* com.controller.mysql.*.*(..))" />
+			<aop:pointcut id="dsOracle"
+				expression="execution(* com.controller.oracle.*.*(..))" />
+			<aop:before method="setdataSourceMysql" pointcut-ref="dsMysql" />
+			<aop:before method="setdataSourceOracle" pointcut-ref="dsOracle" />
+		</aop:aspect>
+	</aop:config>  -->
+
+</beans>
